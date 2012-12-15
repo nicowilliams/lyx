@@ -17,6 +17,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
+xrange=range
 
 ''' 
 This modules offer several free functions to help parse lines.
@@ -56,9 +57,9 @@ find_re(lines, rexp, start[, end]):
 get_value(lines, token, start[, end[, default]):
   Similar to find_token, but it returns what follows the 
   token on the found line. Example:
-    get_value(document.header, "\use_xetex", 0)
+    get_value(document.header, "\\use_xetex", 0)
   will find a line like:
-    \use_xetex true
+    \\use_xetex true
   and, in that case, return "true". (Note that whitespace
   is stripped.) The final argument, default, defaults to "", 
   and is what is returned if we do not find anything. So you
@@ -80,14 +81,14 @@ del_token(lines, token, start[, end]):
 
 find_beginning_of(lines, i, start_token, end_token):
   Here, start_token and end_token are meant to be a matching 
-  pair, like "\begin_layout" and "\end_layout". We look for 
+  pair, like "\\begin_layout" and "\\end_layout". We look for 
   the start_token that pairs with the end_token that occurs
   on or after line i. Returns -1 if not found.
-  So, in the layout case, this would find the \begin_layout 
+  So, in the layout case, this would find the \\begin_layout 
   for the layout line i is in. 
   Example:
     ec = find_token(document.body, "</cell", i)
-    bc = find_beginning_of(document.body, ec, \
+    bc = find_beginning_of(document.body, ec, \\
         "<cell", "</cell")
   Now, assuming no -1s, bc-ec wraps the cell for line i.
 
@@ -119,7 +120,7 @@ is_in_inset(lines, i, inset):
 
 get_containing_inset(lines, i):
   Finds out what kind of inset line i is within. Returns a 
-  list containing what follows \begin_inset on the the line 
+  list containing what follows \\begin_inset on the the line 
   on which the inset begins, plus the starting and ending line.
   Returns False on any kind of error or if it isn't in an inset.
   So get_containing_inset(document.body, i) might return:
