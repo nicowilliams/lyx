@@ -23,10 +23,12 @@ def _cmd_type(tag, rest):
         return 'inset'
     if rest == 'Tabular':
         return 'XML'
-    assert 0 == 1
+    return None
 
 def _parse_begin(line):
-    assert line.startswith('\\begin_')
+    assert line.startswith('\\begin_') or line.startswith('\\index ')
+    if line.startswith('\\index '):
+        return ('index', '\\index', '\end_index', None, line[line.find(' ') + 1:])
     sp = line.find(' ')
     if sp >= 0:
         tag = line[len('\\begin_'):sp]
@@ -61,6 +63,8 @@ def _parse_xml_tag(line):
     s = line[tag_end + 1:end]
     while len(s) > 0:
         s = s.strip()
+        if s.find('=') == -1:
+            break
         end = s.index('=')
         attr = s[0:end]
         quote = s[end + 1]
@@ -84,7 +88,7 @@ def _lyxml2xml(lines, xout, start, end):
             xout.attr('embedded_xml', 'true')
             for a in attrs:
                 xout.attr(a[0], a[1])
-            i = _lyxml2xml(lines, xount, i + 1, e)
+            i = _lyxml2xml(lines, xout, i + 1, e)
         else:
             i = _lyx2xml(lines, xout, i, end)
 
@@ -103,13 +107,16 @@ def _lyx2xml(lines, xout, start=0, end=-1, cmd_type=None):
             # LyX source comment
             #xout.comment(lines[i][1:])
             i += 1
-        elif lines[i].startswith('\\begin_'):
+        elif lines[i].startswith('\\begin_') or lines[i].startswith('\\index '):
             (el, start_tok, end_tok, cmd_type, rest) = _parse_begin(lines[i])
             xout.start_elt(el)
             print('\n\nlines[%d] = %s\n' % (i, lines[i]))
             if rest:
                 xout.attr('name', rest)
             e = find_end_of(lines, i, start_tok, end_tok)
+            # XXX Here we need to find any attributes that might be
+            # interspersed with child nodes so we can suck them in
+            # first.  What a PITA.
             i = _lyx2xml(lines, xout, i + 1, e - 1, cmd_type)
         elif len(lines[i]) == 0 or lines[i] == ' ':
             # Ignore empty lines
