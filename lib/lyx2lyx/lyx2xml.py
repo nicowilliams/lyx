@@ -98,14 +98,15 @@ def _lyx2xml(lines, xout, start=0, end=-1, cmd_type=None):
         assert i > prev_i
         prev_i = i
         if len(lines[i]) == 0:
-            continue
+            i += 1
         elif lines[i][0] == '#':
             # LyX source comment
             #xout.comment(lines[i][1:])
             i += 1
-        elif lines[i].startswith('\\begin'):
+        elif lines[i].startswith('\\begin_'):
             (el, start_tok, end_tok, cmd_type, rest) = _parse_begin(lines[i])
             xout.start_elt(el)
+            print('\n\nlines[%d] = %s\n' % (i, lines[i]))
             if rest:
                 xout.attr('name', rest)
             e = find_end_of(lines, i, start_tok, end_tok)
@@ -115,6 +116,7 @@ def _lyx2xml(lines, xout, start=0, end=-1, cmd_type=None):
             i += 1
         elif cmd_type == 'inset':
             # Parse "\begin_inset CommandInset ..." attributes
+            print('\n\nlines[%d] = %s\n' % (i, lines[i]))
             while i < end and lines[i] != '' and lines[i] != ' ':
                 (a, v) = _parse_attr(lines[i])
                 xout.attr(a, v)
@@ -125,8 +127,9 @@ def _lyx2xml(lines, xout, start=0, end=-1, cmd_type=None):
             # Parse embedded XML contents
             i = _lyxml2xml(lines, xout, i, end)
             cmd_type = None
-        elif lines[i][0] == '\\' and lines[i][0:4] != '\\begin' and lines[i][0:3] != '\\end':
+        elif lines[i][0] == '\\' and not lines[i].startswith('\\begin_') and not lines[i].startswith('\\end_'):
             (a, v) = _parse_attr(lines[i])
+            print('\n\nlines[%d] = %s\n' % (i, lines[i]))
             xout.attr(a, v)
             i += 1
         else:
@@ -143,7 +146,7 @@ def read_lyx(f):
     return lines
 
 def lyx2xml(lines, outcb):
-    xout = XmlStreamer(outcb) # pass in name of DTD
+    xout = XmlStreamer(outcb, 'lyx') # pass in name of DTD
     xout.start_elt('lyx')
     sys.stdout.write('\n\n')
     _lyx2xml(lines, xout)
