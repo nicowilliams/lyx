@@ -9,12 +9,13 @@ from xml_streamer import XmlStreamer
 import re
 import sys
 
-def trim_eol(line):
+def _chomp(line):
     " Remove end of line char(s)."
+    if line[-1] != '\n':
+        return line
     if line[-2:-1] == '\r':
         return line[:-2]
-    else:
-        return line[:-1]
+    return line[:-1]
 
 def _cmd_type(tag, rest):
     if tag != 'inset':
@@ -27,6 +28,7 @@ def _cmd_type(tag, rest):
 
 def _parse_begin(line):
     assert line.startswith('\\begin_') or line.startswith('\\index ')
+    line = _chomp(line)
     if line.startswith('\\index '):
         return ('index', '\\index', '\end_index', None, line[line.find(' ') + 1:])
     sp = line.find(' ')
@@ -41,6 +43,7 @@ def _parse_begin(line):
     return (tag, start_tok, '\end_' + tag, _cmd_type(tag, rest), rest)
 
 def _parse_attr(line):
+    line = _chomp(line)
     if line.startswith('\\'):
         line = line[1:]
     sp = line.find(' ')
@@ -49,6 +52,7 @@ def _parse_attr(line):
     return (line[0:sp], line[sp + 1:])
 
 def _parse_xml_tag(line):
+    line = _chomp(line)
     assert line.startswith('<') and not line.startswith('</')
     end = line.rfind('>')
     if line[end - 1] == '/':
@@ -91,7 +95,21 @@ def _lyxml2xml(lines, xout, start, end):
             i = _lyxml2xml(lines, xout, i + 1, e)
         else:
             i = _lyx2xml(lines, xout, i, end)
+    return i
 
+def _handle_interspersed_attrs(lines, xout, start, end):
+    i = start
+    depth = 0
+    while i < end:
+        if lines[i].startswith('\\begin_') or lines[i].startswith('\\index '):
+            depth += 1
+        elif lines[i].startswith('\\end_'):
+            depth -= 1
+        elif depth == 0 and lines[i].startswith('\\'):
+            (a, v) = _parse_attr(lines[i])
+            print('\n\nlines[%d] = %s\n' % (i, lines[i]))
+            xout.attr(a, v)
+        i += 1
 
 def _lyx2xml(lines, xout, start=0, end=-1, cmd_type=None):
     i = start
@@ -99,6 +117,7 @@ def _lyx2xml(lines, xout, start=0, end=-1, cmd_type=None):
         end = len(lines)
     prev_i = -1
     while i < end:
+        print('\n\nParsing line %d: %s\n' % (i, lines[i]))
         assert i > prev_i
         prev_i = i
         if len(lines[i]) == 0:
@@ -114,10 +133,21 @@ def _lyx2xml(lines, xout, start=0, end=-1, cmd_type=None):
             if rest:
                 xout.attr('name', rest)
             e = find_end_of(lines, i, start_tok, end_tok)
+            print('\n\nfind_end_of(%d, %s, %s) = %d\n' % (i, start_tok, end_tok, e))
             # XXX Here we need to find any attributes that might be
             # interspersed with child nodes so we can suck them in
             # first.  What a PITA.
+            _handle_interspersed_attrs(lines, xout, i + 1, e - 1)
             i = _lyx2xml(lines, xout, i + 1, e - 1, cmd_type)
+            print('\n\n_lyx2xml(...) = %d, looking for %d\n' % (i, e))
+            if i == e + 1:
+                i += 1
+            else:
+                print('\n\n_lyx2xml() returned %d, e = %d\n' % (i, e))
+        elif lines[i].startswith('\\end_'):
+            xout.end_elt(el)
+            cmd_type = None
+            i += 1
         elif len(lines[i]) == 0 or lines[i] == ' ':
             # Ignore empty lines
             i += 1
@@ -135,12 +165,17 @@ def _lyx2xml(lines, xout, start=0, end=-1, cmd_type=None):
             i = _lyxml2xml(lines, xout, i, end)
             cmd_type = None
         elif lines[i][0] == '\\' and not lines[i].startswith('\\begin_') and not lines[i].startswith('\\end_'):
+            if not xout.in_tag:
+                i += 1
+                continue
             (a, v) = _parse_attr(lines[i])
             print('\n\nlines[%d] = %s\n' % (i, lines[i]))
             xout.attr(a, v)
+            cmd_type = None
             i += 1
         else:
             xout.text(lines[i])
+            cmd_type = None
             i += 1
     return i
 
@@ -148,8 +183,8 @@ def read_lyx(f):
     f = open(f, 'r')
     lines = f.readlines()
     f.close()
-    for i in range(len(lines)):
-        lines[i] = trim_eol(lines[i])
+    #for i in range(len(lines)):
+    #    lines[i] = _chomp(lines[i])
     return lines
 
 def lyx2xml(lines, outcb):

@@ -136,6 +136,9 @@ class XmlStreamer(object):
         '''
         self._close_doctype()
         assert self.depth > 0
+        if el and self.stack[-1] != el:
+            print('\n\nWTF: el == %s, expecting %s at depth %d\n' % (el, self.stack[-1], self.depth))
+            print(self.stack)
         assert not el or self.stack[-1] == el
         if not self.in_tag:
             self.outcb('</')
