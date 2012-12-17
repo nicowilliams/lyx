@@ -12,7 +12,7 @@ import sys
 
 debug = False
 
-def _fix_text_styling(lines):
+def _fix_text_styling(lines, debugcb):
     stack = []
     fixes = []
     depths = {}
@@ -21,55 +21,55 @@ def _fix_text_styling(lines):
     depths['series'] = 0
     i = 0
     while i < len(lines):
-        #sys.stderr.write('\n\n[debug] looking at line %d: %s' % (i, lines[i]))
+        #debugcb('looking at line %d: %s' % (i, lines[i]))
         line = lines[i]
         if not line.startswith('\\') or line.find(' ') == -1:
-            #sys.stderr.write('\n\n[debug] 1 i++ at %d\n' % (i,))
+            #debugcb('1 i++ at %d' % (i,))
             i += 1
             continue
         line = _chomp(line[1:])
         a = line[0:line.find(' ')]
         if not a in depths:
-            #sys.stderr.write('\n\n[debug] 2 i++ at %d\n' % (i,))
+            #debugcb('2 i++ at %d' % (i,))
             i += 1
             continue
         v = line[line.find(' ') + 1:]
         if v != 'default':
-            #sys.stderr.write('\n\n[debug] seen \\%s at line %d\n' % (line, i))
+            #debugcb('seen \\%s at line %d' % (line, i))
             depths[a] += 1
             stack.append((a, v))
-            #sys.stderr.write('\n\n[debug] 3 i++ at %d\n' % (i,))
+            #debugcb('3 i++ at %d' % (i,))
             i += 1
         elif stack[-1][0] != a:
             # Out of order; re-order
-            #sys.stderr.write('\n\n[debug] fixing ordering for \\%s at line %d, stack = %s\n' % (a, i, repr(stack)))
+            debugcb('fixing ordering for \\%s at line %d, stack = %s' % (a, i, repr(stack)))
             for k in range(len(stack) - 1, -1, -1):
                 if stack[k][0] == a:
-                    #sys.stderr.write('\n\n[debug] fixed ordering for \\%s\n' % (a,))
+                    debugcb('fixed ordering for \\%s' % (a,))
                     depths[a] -= 1
                     del(stack[k])
                     continue
-                #sys.stderr.write('\n\n[debug] fixing ordering for \\%s by closing %s\n' % (a, stack[k][0]))
+                debugcb('fixing ordering for \\%s by closing %s' % (a, stack[k][0]))
                 lines.insert(i, '\\' + stack[k][0] + ' default')
                 depths[stack[k][0]] -= 1
-                #sys.stderr.write('\n\n[debug] 4 i++ at %d\n' % (i,))
+                #debugcb('4 i++ at %d' % (i,))
                 i += 1
-            #sys.stderr.write('\n\n[debug] 5 i++ at %d\n' % (i,))
+            #debugcb('5 i++ at %d' % (i,))
             i += 1
             m = 0
             for k in range(len(stack) - 1, -1, -1):
                 if stack[k][0] == a:
                     break
                 lines.insert(i, '\\' + stack[k][0] + ' ' + stack[k][1])
-                #sys.stderr.write('\n\n[debug] fixing ordering for \\%s by re-opening %s %s\n' % (a, stack[k][0], stack[k][1]))
+                debugcb('fixing ordering for \\%s by re-opening %s %s' % (a, stack[k][0], stack[k][1]))
                 m += 1
-            #sys.stderr.write('\n\n[debug] 6 i += %d at %d\n' % (m, i))
+            #debugcb('6 i += %d at %d' % (m, i))
             i += m
         else:
             assert stack[-1][0] == a
             depths[a] -= 1
             stack.pop()
-            #sys.stderr.write('\n\n[debug] 7 i++ at %d\n' % (i,))
+            #debugcb('7 i++ at %d' % (i,))
             i += 1
     return lines
 
@@ -118,7 +118,7 @@ def _parse_attr(line):
         return (line, 'true')
     a = line[0:sp]
     if a == 'emph' or a == 'series' or a == 'shape':
-        return (None, None) # XXX Fix this!  Must handle \emph!
+        return (None, None)
     v = line[sp + 1:]
     if v[0] == '"':
         v = v[1:]
@@ -274,14 +274,14 @@ def _lyx2xml(lines, xout, debugcb, start=0, end=-1, cmd_type=None):
             # Parse embedded XML contents
             i = _lyxml2xml(lines, xout, i, end, debugcb)
             cmd_type = None
-        elif lines[i][0] == '\\' and not lines[i].startswith('\\begin_') and not lines[i].startswith('\\end_') and not lines[i].startswith('\\emph') and not lines[i].startswith('\\series'):
-            #if not xout.in_tag:
-            #    i += 1
-            #    continue
-            #(a, v) = _parse_attr(lines[i])
-            #debugcb('lines[%d] = %s' % (i, lines[i]))
-            #xout.attr(a, v)
-            #cmd_type = None
+        elif lines[i][0] == '\\' and \
+           not lines[i].startswith('\\begin_') and \
+           not lines[i].startswith('\\end_') and \
+           not lines[i].startswith('\\emph') and \
+           not lines[i].startswith('\\series') and \
+           not lines[i].startswith('\\shape'):
+            # An attribute, which we've handled above with the call to
+            # _handle_interspersed_attrs().
             i += 1
         else:
             line = lines[i]
@@ -334,7 +334,10 @@ def lyx2xml(lines, outcb, debugcb=None):
     xout = XmlStreamer(outcb, 'lyx') # pass in name of DTD
     xout.start_elt('lyx')
     sys.stdout.write('\n\n')
-    lines = _fix_text_styling(lines)
+    lines = _fix_text_styling(lines, _debugcb)
+    #debugcb('Fixed lines:\n')
+    #for i in range(len(lines)):
+    #    debugcb('%d %s' % (i + 1, lines[i]))
     _lyx2xml(lines, xout, _debugcb)
     xout.end_elt('lyx')
     xout.finish()
