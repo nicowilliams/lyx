@@ -21,37 +21,55 @@ def _fix_text_styling(lines):
     depths['series'] = 0
     i = 0
     while i < len(lines):
+        #sys.stderr.write('\n\n[debug] looking at line %d: %s' % (i, lines[i]))
         line = lines[i]
         if not line.startswith('\\') or line.find(' ') == -1:
+            #sys.stderr.write('\n\n[debug] 1 i++ at %d\n' % (i,))
             i += 1
             continue
         line = _chomp(line[1:])
         a = line[0:line.find(' ')]
         if not a in depths:
+            #sys.stderr.write('\n\n[debug] 2 i++ at %d\n' % (i,))
             i += 1
             continue
         v = line[line.find(' ') + 1:]
         if v != 'default':
+            #sys.stderr.write('\n\n[debug] seen \\%s at line %d\n' % (line, i))
             depths[a] += 1
             stack.append((a, v))
+            #sys.stderr.write('\n\n[debug] 3 i++ at %d\n' % (i,))
             i += 1
         elif stack[-1][0] != a:
             # Out of order; re-order
+            #sys.stderr.write('\n\n[debug] fixing ordering for \\%s at line %d, stack = %s\n' % (a, i, repr(stack)))
             for k in range(len(stack) - 1, -1, -1):
                 if stack[k][0] == a:
+                    #sys.stderr.write('\n\n[debug] fixed ordering for \\%s\n' % (a,))
+                    depths[a] -= 1
                     del(stack[k])
                     continue
+                #sys.stderr.write('\n\n[debug] fixing ordering for \\%s by closing %s\n' % (a, stack[k][0]))
                 lines.insert(i, '\\' + stack[k][0] + ' default')
+                depths[stack[k][0]] -= 1
+                #sys.stderr.write('\n\n[debug] 4 i++ at %d\n' % (i,))
                 i += 1
+            #sys.stderr.write('\n\n[debug] 5 i++ at %d\n' % (i,))
             i += 1
             m = 0
             for k in range(len(stack) - 1, -1, -1):
                 if stack[k][0] == a:
                     break
                 lines.insert(i, '\\' + stack[k][0] + ' ' + stack[k][1])
+                #sys.stderr.write('\n\n[debug] fixing ordering for \\%s by re-opening %s %s\n' % (a, stack[k][0], stack[k][1]))
                 m += 1
+            #sys.stderr.write('\n\n[debug] 6 i += %d at %d\n' % (m, i))
             i += m
         else:
+            assert stack[-1][0] == a
+            depths[a] -= 1
+            stack.pop()
+            #sys.stderr.write('\n\n[debug] 7 i++ at %d\n' % (i,))
             i += 1
     return lines
 
