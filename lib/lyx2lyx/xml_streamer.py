@@ -231,4 +231,4 @@ def test_xml_streamer():
     xml.end_elt('lyx')
     xml.finish()
 
-test_xml_streamer()
+# test_xml_streamer()

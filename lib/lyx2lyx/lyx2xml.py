@@ -9,6 +9,13 @@ from xml_streamer import XmlStreamer
 import re
 import sys
 
+debug = False
+
+def _debug(s):
+    if not debug:
+        return
+    print('\n\n[debug] %s\n' % (s,))
+
 def _chomp(line):
     " Remove end of line char(s)."
     if line[-1] != '\n':
@@ -49,7 +56,13 @@ def _parse_attr(line):
     sp = line.find(' ')
     if sp == -1:
         return (line, 'true')
-    return (line[0:sp], line[sp + 1:])
+    a = line[0:sp]
+    v = line[sp + 1:]
+    if v[0] == '"':
+        v = v[1:]
+    if v[-1] == '"':
+        v = v[0:-1]
+    return (a, v)
 
 def _parse_xml_tag(line):
     line = _chomp(line)
@@ -83,16 +96,38 @@ def _parse_xml_tag(line):
 def _lyxml2xml(lines, xout, start, end):
     i = start
     while i < end:
+        _debug('Parsing line %d: %s' % (i, lines[i]))
+        # Wow, lyxtabular's <column> tags aren't closed in .lyx!  What a
+        # mess.  We fix that here by closing the tag immediately.  Ditto
+        # <features>.
+        if lines[i].startswith('<column') or lines[i].startswith('<features'):
+            lines[i] = lines[i][0:-1] + '/>'
         if lines[i].startswith('</'):
-            xout.end_elt(lines[i][2:-1])
+            xout.end_elt(lines[i][2:-2])
+            i += 1
         elif lines[i].startswith('<'):
             (tag, attrs, start_tok, end_tok) = _parse_xml_tag(lines[i])
-            e = find_end_of(lines, i, start_tok, end_tok)
+            # There don't seem to be tags with no child nodes in .lyx,
+            # but let's handle them just in case.
+            if lines[i][-2] != '/':
+                e = find_end_of(lines, i, start_tok, end_tok)
+                _debug('find_end_of(%d, %s, %s) = %d' % (i, start_tok, end_tok, e))
+            else:
+                e = None
             xout.start_elt(tag)
             xout.attr('embedded_xml', 'true')
             for a in attrs:
                 xout.attr(a[0], a[1])
-            i = _lyxml2xml(lines, xout, i + 1, e)
+            if e:
+                i = _lyxml2xml(lines, xout, i + 1, e)
+                _debug('_lyx2xml(...) = %d, looking for %d' % (i, e))
+                if i + 1 == e:
+                    i += 1
+                else:
+                    _debug('_lyx2xml() returned %d, e = %d' % (i, e))
+            else:
+                xout.end_elt(tag)
+                i += 1
         else:
             i = _lyx2xml(lines, xout, i, end)
     return i
@@ -107,7 +142,7 @@ def _handle_interspersed_attrs(lines, xout, start, end):
             depth -= 1
         elif depth == 0 and lines[i].startswith('\\'):
             (a, v) = _parse_attr(lines[i])
-            print('\n\nlines[%d] = %s\n' % (i, lines[i]))
+            _debug('lines[%d] = %s' % (i, lines[i]))
             xout.attr(a, v)
         i += 1
 
@@ -117,7 +152,7 @@ def _lyx2xml(lines, xout, start=0, end=-1, cmd_type=None):
         end = len(lines)
     prev_i = -1
     while i < end:
-        print('\n\nParsing line %d: %s\n' % (i, lines[i]))
+        _debug('Parsing line %d: %s' % (i, lines[i]))
         assert i > prev_i
         prev_i = i
         if len(lines[i]) == 0:
@@ -129,22 +164,22 @@ def _lyx2xml(lines, xout, start=0, end=-1, cmd_type=None):
         elif lines[i].startswith('\\begin_') or lines[i].startswith('\\index '):
             (el, start_tok, end_tok, cmd_type, rest) = _parse_begin(lines[i])
             xout.start_elt(el)
-            print('\n\nlines[%d] = %s\n' % (i, lines[i]))
+            _debug('lines[%d] = %s' % (i, lines[i]))
             if rest:
-                xout.attr('name', rest)
+                xout.attr('thing_name', rest)
             e = find_end_of(lines, i, start_tok, end_tok)
-            print('\n\nfind_end_of(%d, %s, %s) = %d\n' % (i, start_tok, end_tok, e))
+            _debug('find_end_of(%d, %s, %s) = %d' % (i, start_tok, end_tok, e))
             # XXX Here we need to find any attributes that might be
             # interspersed with child nodes so we can suck them in
             # first.  What a PITA.
             _handle_interspersed_attrs(lines, xout, i + 1, e - 1)
             i = _lyx2xml(lines, xout, i + 1, e - 1, cmd_type)
-            print('\n\n_lyx2xml(...) = %d, looking for %d\n' % (i, e))
-            if i == e + 1:
+            _debug('_lyx2xml(...) = %d, looking for %s at %d; end = %d' % (i, end_tok, e, end))
+            if i + 1 == e:
                 i += 1
             else:
-                print('\n\n_lyx2xml() returned %d, e = %d\n' % (i, e))
-        elif lines[i].startswith('\\end_'):
+                _debug('_lyx2xml() returned %d, e = %d; end = %d' % (i, e, end))
+            assert lines[i].startswith('\\end_')
             xout.end_elt(el)
             cmd_type = None
             i += 1
@@ -153,7 +188,7 @@ def _lyx2xml(lines, xout, start=0, end=-1, cmd_type=None):
             i += 1
         elif cmd_type == 'inset':
             # Parse "\begin_inset CommandInset ..." attributes
-            print('\n\nlines[%d] = %s\n' % (i, lines[i]))
+            _debug('lines[%d] = %s' % (i, lines[i]))
             while i < end and lines[i] != '' and lines[i] != ' ':
                 (a, v) = _parse_attr(lines[i])
                 xout.attr(a, v)
@@ -165,13 +200,13 @@ def _lyx2xml(lines, xout, start=0, end=-1, cmd_type=None):
             i = _lyxml2xml(lines, xout, i, end)
             cmd_type = None
         elif lines[i][0] == '\\' and not lines[i].startswith('\\begin_') and not lines[i].startswith('\\end_'):
-            if not xout.in_tag:
-                i += 1
-                continue
-            (a, v) = _parse_attr(lines[i])
-            print('\n\nlines[%d] = %s\n' % (i, lines[i]))
-            xout.attr(a, v)
-            cmd_type = None
+            #if not xout.in_tag:
+            #    i += 1
+            #    continue
+            #(a, v) = _parse_attr(lines[i])
+            #_debug('lines[%d] = %s' % (i, lines[i]))
+            #xout.attr(a, v)
+            #cmd_type = None
             i += 1
         else:
             xout.text(lines[i])
@@ -197,6 +232,9 @@ def lyx2xml(lines, outcb):
     return True
 
 def outcb(text):
-    sys.stdout.write(text)
+    if text:
+        sys.stdout.write(text)
+    #else:
+    #    sys.stdout.write('\n\n<!-- All done! -->\n')
 
 lyx2xml(read_lyx('/tmp/test.lyx'), outcb)
