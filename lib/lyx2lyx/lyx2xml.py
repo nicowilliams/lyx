@@ -12,6 +12,50 @@ import sys
 
 debug = False
 
+def _fix_text_styling(lines):
+    stack = []
+    fixes = []
+    depths = {}
+    depths['emph'] = 0
+    depths['shape'] = 0
+    depths['series'] = 0
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if not line.startswith('\\') or line.find(' ') == -1:
+            i += 1
+            continue
+        line = _chomp(line[1:])
+        a = line[0:line.find(' ')]
+        if not a in depths:
+            i += 1
+            continue
+        v = line[line.find(' ') + 1:]
+        if v != 'default':
+            depths[a] += 1
+            stack.append((a, v))
+            i += 1
+        elif stack[-1][0] != a:
+            # Out of order; re-order
+            for k in range(len(stack) - 1, -1, -1):
+                if stack[k][0] == a:
+                    del(stack[k])
+                    continue
+                lines.insert(i, '\\' + stack[k][0] + ' default')
+                i += 1
+            i += 1
+            m = 0
+            for k in range(len(stack) - 1, -1, -1):
+                if stack[k][0] == a:
+                    break
+                lines.insert(i, '\\' + stack[k][0] + ' ' + stack[k][1])
+                m += 1
+            i += m
+        else:
+            i += 1
+    return lines
+
+
 def _chomp(line):
     " Remove end of line char(s)."
     if line[-1] != '\n':
@@ -272,6 +316,7 @@ def lyx2xml(lines, outcb, debugcb=None):
     xout = XmlStreamer(outcb, 'lyx') # pass in name of DTD
     xout.start_elt('lyx')
     sys.stdout.write('\n\n')
+    lines = _fix_text_styling(lines)
     _lyx2xml(lines, xout, _debugcb)
     xout.end_elt('lyx')
     xout.finish()
