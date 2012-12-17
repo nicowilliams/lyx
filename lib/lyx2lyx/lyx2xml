@@ -1,0 +1,39 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+" Program used to convert between different versions of the lyx file format."
+import optparse
+import sys
+import LyX
+from lyx2xml import read_lyx, lyx2xml
+
+def outcb(text):
+    if text:
+        sys.stdout.write(text)
+
+def main():
+    args = {}
+    args["usage"] = "usage: %prog [options] [file]"
+    args["version"] = """lyx2xml, version 0.1 Copyright (C) 2012 Nicolas Williams"""
+    args["description"] = """Convert lyx file <file> to XML."""
+
+    parser = optparse.OptionParser(**args)
+
+    parser.add_option("-d", "--debug", type="int",
+                      help="level=0..2 (O_ quiet, 10_verbose) default: 2")
+
+    (options, args) = parser.parse_args()
+
+    def _debugcb(s):
+        if options.debug != None:
+            sys.stderr.write('\n\n[debug] %s\n' % (s))
+    if args:
+        lyx2xml(read_lyx(args[0]), outcb, _debugcb)
+    else:
+        lyx2xml(read_lyx('/dev/fd/0'), outcb, _debugcb)
+
+    sys.exit(0)
+
+if __name__ == "__main__":
+    main()
+
