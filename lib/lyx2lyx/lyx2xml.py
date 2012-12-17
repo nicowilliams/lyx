@@ -209,7 +209,10 @@ def _lyx2xml(lines, xout, start=0, end=-1, cmd_type=None):
             #cmd_type = None
             i += 1
         else:
-            xout.text(lines[i])
+            if xout.stack[-1] == 'layout':
+                xout.text(_chomp(lines[i]))
+            else:
+                xout.text(lines[i])
             cmd_type = None
             i += 1
     return i
