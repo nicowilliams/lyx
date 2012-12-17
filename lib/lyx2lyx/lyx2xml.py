@@ -97,11 +97,6 @@ def _lyxml2xml(lines, xout, start, end):
     i = start
     while i < end:
         _debug('Parsing line %d: %s' % (i, lines[i]))
-        # Wow, lyxtabular's <column> tags aren't closed in .lyx!  What a
-        # mess.  We fix that here by closing the tag immediately.  Ditto
-        # <features>.
-        if lines[i].startswith('<column') or lines[i].startswith('<features'):
-            lines[i] = lines[i][0:-1] + '/>'
         if lines[i].startswith('</'):
             xout.end_elt(lines[i][2:-2])
             i += 1
@@ -112,6 +107,10 @@ def _lyxml2xml(lines, xout, start, end):
             if lines[i][-2] != '/':
                 e = find_end_of(lines, i, start_tok, end_tok)
                 _debug('find_end_of(%d, %s, %s) = %d' % (i, start_tok, end_tok, e))
+                # lyxtabular's <column> and <features> don't get closed!
+                # What a mess.
+                if e == -1:
+                    e = None
             else:
                 e = None
             xout.start_elt(tag)
@@ -168,6 +167,7 @@ def _lyx2xml(lines, xout, start=0, end=-1, cmd_type=None):
             if rest:
                 xout.attr('thing_name', rest)
             e = find_end_of(lines, i, start_tok, end_tok)
+            assert e != -1
             _debug('find_end_of(%d, %s, %s) = %d' % (i, start_tok, end_tok, e))
             # XXX Here we need to find any attributes that might be
             # interspersed with child nodes so we can suck them in
