@@ -27,7 +27,7 @@ def _chomp(line):
 def _cmd_type(tag, rest):
     if tag != 'inset':
         return None
-    if rest.startswith('CommandInset'):
+    if rest.startswith('CommandInset') or rest.startswith('Float') or rest.startswith('listings'):
         return 'inset'
     if rest == 'Tabular':
         return 'XML'
@@ -157,15 +157,23 @@ def _lyx2xml(lines, xout, start=0, end=-1, cmd_type=None):
         _debug('Parsing line %d: %s' % (i, lines[i]))
         assert i > prev_i
         prev_i = i
-        if len(lines[i]) == 0:
+        if len(lines[i]) == 0 or lines[i] == ' ':
+            # Ignore empty lines
             i += 1
+            cmd_type = None
         elif lines[i][0] == '#':
             # LyX source comment
             #xout.comment(lines[i][1:])
             i += 1
+            cmd_type = None
         elif lines[i].startswith('\\begin_') or lines[i].startswith('\\index '):
             (el, start_tok, end_tok, cmd_type, rest) = _parse_begin(lines[i])
             xout.start_elt(el)
+            if el == 'inset' and not cmd_type and (i + 1) < end and lines[i + 1].startswith('status '):
+                i += 1 # skip status open|collapsed line
+                status = lines[i][lines[i].find(' ') + 1:]
+            else:
+                status = None
             _debug('lines[%d] = %s' % (i, lines[i]))
             if rest:
                 xout.attr('thing_name', rest)
@@ -176,6 +184,8 @@ def _lyx2xml(lines, xout, start=0, end=-1, cmd_type=None):
             # interspersed with child nodes so we can suck them in
             # first.  What a PITA.
             _handle_interspersed_attrs(lines, xout, i + 1, e - 1)
+            if status:
+                xout.attr('status', status)
             i = _lyx2xml(lines, xout, i + 1, e, cmd_type)
             _debug('_lyx2xml(...) = %d, looking for %s at %d; end = %d' % (i, end_tok, e, end))
             if i + 1 == e:
@@ -186,16 +196,14 @@ def _lyx2xml(lines, xout, start=0, end=-1, cmd_type=None):
             xout.end_elt(el)
             cmd_type = None
             i += 1
-        elif len(lines[i]) == 0 or lines[i] == ' ':
-            # Ignore empty lines
-            i += 1
         elif cmd_type == 'inset':
             # Parse "\begin_inset CommandInset ..." attributes
             _debug('lines[%d] = %s' % (i, lines[i]))
             while i < end and lines[i] != '' and lines[i] != ' ':
                 (a, v) = _parse_attr(lines[i])
-                if a and v:
-                    xout.attr(a, v)
+                if not a or not v:
+                    break
+                xout.attr(a, v)
                 i += 1
             # then suck in content
             cmd_type = None
