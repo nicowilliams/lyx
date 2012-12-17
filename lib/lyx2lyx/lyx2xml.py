@@ -5,6 +5,7 @@ This file has code for straightforward conversion of LyX format to XML.
 '''
 
 from parser_tools import find_end_of
+from xml.sax.saxutils import escape
 from xml_streamer import XmlStreamer
 import re
 import sys
@@ -54,6 +55,8 @@ def _parse_attr(line):
     if sp == -1:
         return (line, 'true')
     a = line[0:sp]
+    if a == 'emph' or a == 'series' or a == 'shape':
+        return (None, None) # XXX Fix this!  Must handle \emph!
     v = line[sp + 1:]
     if v[0] == '"':
         v = v[1:]
@@ -144,6 +147,9 @@ def _handle_interspersed_attrs(lines, xout, start, end, debugcb):
         i += 1
 
 def _lyx2xml(lines, xout, debugcb, start=0, end=-1, cmd_type=None):
+    in_emph = False
+    in_series = False
+    in_shape = False
     i = start
     if end < 0:
         end = len(lines)
@@ -206,7 +212,7 @@ def _lyx2xml(lines, xout, debugcb, start=0, end=-1, cmd_type=None):
             # Parse embedded XML contents
             i = _lyxml2xml(lines, xout, i, end, debugcb)
             cmd_type = None
-        elif lines[i][0] == '\\' and not lines[i].startswith('\\begin_') and not lines[i].startswith('\\end_'):
+        elif lines[i][0] == '\\' and not lines[i].startswith('\\begin_') and not lines[i].startswith('\\end_') and not lines[i].startswith('\\emph') and not lines[i].startswith('\\series'):
             #if not xout.in_tag:
             #    i += 1
             #    continue
@@ -216,10 +222,35 @@ def _lyx2xml(lines, xout, debugcb, start=0, end=-1, cmd_type=None):
             #cmd_type = None
             i += 1
         else:
+            line = lines[i]
             if xout.stack[-1] == 'layout':
-                xout.text(_chomp(lines[i]))
-            else:
-                xout.text(lines[i])
+                line = _chomp(line)
+            if lines[i].startswith('\\emph'):
+                if in_emph:
+                    xout.end_elt('emph')
+                    in_emph = False
+                else:
+                    xout.start_elt('emph')
+                    in_emph = True
+            if lines[i].startswith('\\series'):
+                series = _chomp(lines[i][lines[i].find(' ') + 1:])
+                if in_series:
+                    xout.end_elt('series')
+                    in_series = False
+                else:
+                    xout.start_elt('series')
+                    xout.attr('type', series)
+                    in_series = True
+            if lines[i].startswith('\\shape'):
+                shape = _chomp(lines[i][lines[i].find(' ') + 1:])
+                if in_shape:
+                    xout.end_elt('shape')
+                    in_shape = False
+                else:
+                    xout.start_elt('shape')
+                    xout.attr('type', shape)
+                    in_shape = True
+            xout.text(escape(line))
             cmd_type = None
             i += 1
     return i
