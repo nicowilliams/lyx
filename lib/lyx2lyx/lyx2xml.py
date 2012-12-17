@@ -232,7 +232,7 @@ def _lyx2xml(lines, xout, debugcb, start=0, end=-1, cmd_type=None):
                 else:
                     xout.start_elt('emph')
                     in_emph = True
-            if lines[i].startswith('\\series'):
+            elif lines[i].startswith('\\series'):
                 series = _chomp(lines[i][lines[i].find(' ') + 1:])
                 if in_series:
                     xout.end_elt('series')
@@ -241,7 +241,7 @@ def _lyx2xml(lines, xout, debugcb, start=0, end=-1, cmd_type=None):
                     xout.start_elt('series')
                     xout.attr('type', series)
                     in_series = True
-            if lines[i].startswith('\\shape'):
+            elif lines[i].startswith('\\shape'):
                 shape = _chomp(lines[i][lines[i].find(' ') + 1:])
                 if in_shape:
                     xout.end_elt('shape')
@@ -250,7 +250,8 @@ def _lyx2xml(lines, xout, debugcb, start=0, end=-1, cmd_type=None):
                     xout.start_elt('shape')
                     xout.attr('type', shape)
                     in_shape = True
-            xout.text(escape(line))
+            else:
+                xout.text(escape(line))
             cmd_type = None
             i += 1
     return i
