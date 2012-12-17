@@ -53,6 +53,8 @@ def _parse_attr(line):
     line = _chomp(line)
     if line.startswith('\\'):
         line = line[1:]
+    if line == '':
+        return (None, None)
     sp = line.find(' ')
     if sp == -1:
         return (line, 'true')
@@ -141,8 +143,9 @@ def _handle_interspersed_attrs(lines, xout, start, end):
             depth -= 1
         elif depth == 0 and lines[i].startswith('\\'):
             (a, v) = _parse_attr(lines[i])
-            _debug('lines[%d] = %s' % (i, lines[i]))
-            xout.attr(a, v)
+            if a and v:
+                _debug('lines[%d] = %s' % (i, lines[i]))
+                xout.attr(a, v)
         i += 1
 
 def _lyx2xml(lines, xout, start=0, end=-1, cmd_type=None):
@@ -173,7 +176,7 @@ def _lyx2xml(lines, xout, start=0, end=-1, cmd_type=None):
             # interspersed with child nodes so we can suck them in
             # first.  What a PITA.
             _handle_interspersed_attrs(lines, xout, i + 1, e - 1)
-            i = _lyx2xml(lines, xout, i + 1, e - 1, cmd_type)
+            i = _lyx2xml(lines, xout, i + 1, e, cmd_type)
             _debug('_lyx2xml(...) = %d, looking for %s at %d; end = %d' % (i, end_tok, e, end))
             if i + 1 == e:
                 i += 1
@@ -191,7 +194,8 @@ def _lyx2xml(lines, xout, start=0, end=-1, cmd_type=None):
             _debug('lines[%d] = %s' % (i, lines[i]))
             while i < end and lines[i] != '' and lines[i] != ' ':
                 (a, v) = _parse_attr(lines[i])
-                xout.attr(a, v)
+                if a and v:
+                    xout.attr(a, v)
                 i += 1
             # then suck in content
             cmd_type = None
