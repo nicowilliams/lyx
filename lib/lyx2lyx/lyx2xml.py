@@ -12,13 +12,11 @@ import sys
 
 debug = False
 
+mixed_tags = { 'emph':'bool', 'shape':'multivalue', 'series':'multivalue' }
+
 def _fix_text_styling(lines, debugcb):
     stack = []
     fixes = []
-    depths = {}
-    depths['emph'] = 0
-    depths['shape'] = 0
-    depths['series'] = 0
     i = 0
     while i < len(lines):
         #debugcb('looking at line %d: %s' % (i, lines[i]))
@@ -29,14 +27,13 @@ def _fix_text_styling(lines, debugcb):
             continue
         line = _chomp(line[1:])
         a = line[0:line.find(' ')]
-        if not a in depths:
+        if not a in mixed_tags:
             #debugcb('2 i++ at %d' % (i,))
             i += 1
             continue
         v = line[line.find(' ') + 1:]
         if v != 'default':
             #debugcb('seen \\%s at line %d' % (line, i))
-            depths[a] += 1
             stack.append((a, v))
             #debugcb('3 i++ at %d' % (i,))
             i += 1
@@ -46,12 +43,10 @@ def _fix_text_styling(lines, debugcb):
             for k in range(len(stack) - 1, -1, -1):
                 if stack[k][0] == a:
                     debugcb('fixed ordering for \\%s' % (a,))
-                    depths[a] -= 1
                     del(stack[k])
                     continue
                 debugcb('fixing ordering for \\%s by closing %s' % (a, stack[k][0]))
                 lines.insert(i, '\\' + stack[k][0] + ' default')
-                depths[stack[k][0]] -= 1
                 #debugcb('4 i++ at %d' % (i,))
                 i += 1
             #debugcb('5 i++ at %d' % (i,))
@@ -67,7 +62,6 @@ def _fix_text_styling(lines, debugcb):
             i += m
         else:
             assert stack[-1][0] == a
-            depths[a] -= 1
             stack.pop()
             #debugcb('7 i++ at %d' % (i,))
             i += 1
@@ -117,7 +111,7 @@ def _parse_attr(line):
     if sp == -1:
         return (line, 'true')
     a = line[0:sp]
-    if a == 'emph' or a == 'series' or a == 'shape':
+    if a in mixed_tags:
         return (None, None)
     v = line[sp + 1:]
     if v[0] == '"':
@@ -208,10 +202,15 @@ def _handle_interspersed_attrs(lines, xout, start, end, debugcb):
                 xout.attr(a, v)
         i += 1
 
+def _key(line):
+    if len(line) > 0 and line[0] == '\\' and line.find(' ') > -1:
+        if line.find(' ') > -1:
+            return line[1:line.find(' ')]
+        else:
+            return _chomp(line[1:])
+    return None
+
 def _lyx2xml(lines, xout, debugcb, start=0, end=-1, cmd_type=None):
-    in_emph = False
-    in_series = False
-    in_shape = False
     i = start
     if end < 0:
         end = len(lines)
@@ -277,9 +276,7 @@ def _lyx2xml(lines, xout, debugcb, start=0, end=-1, cmd_type=None):
         elif lines[i][0] == '\\' and \
            not lines[i].startswith('\\begin_') and \
            not lines[i].startswith('\\end_') and \
-           not lines[i].startswith('\\emph') and \
-           not lines[i].startswith('\\series') and \
-           not lines[i].startswith('\\shape'):
+           not _key(lines[i]) in mixed_tags:
             # An attribute, which we've handled above with the call to
             # _handle_interspersed_attrs().
             i += 1
@@ -287,31 +284,15 @@ def _lyx2xml(lines, xout, debugcb, start=0, end=-1, cmd_type=None):
             line = lines[i]
             if xout.stack[-1] == 'layout':
                 line = _chomp(line)
-            if lines[i].startswith('\\emph'):
-                if in_emph:
-                    xout.end_elt('emph')
-                    in_emph = False
+            key = _key(line)
+            debugcb('FOO: %s from %s' % (key,line))
+            if key in mixed_tags:
+                val = _chomp(lines[i][lines[i].find(' ') + 1:])
+                if val == 'default':
+                    xout.end_elt(key)
                 else:
-                    xout.start_elt('emph')
-                    in_emph = True
-            elif lines[i].startswith('\\series'):
-                series = _chomp(lines[i][lines[i].find(' ') + 1:])
-                if in_series:
-                    xout.end_elt('series')
-                    in_series = False
-                else:
-                    xout.start_elt('series')
-                    xout.attr('type', series)
-                    in_series = True
-            elif lines[i].startswith('\\shape'):
-                shape = _chomp(lines[i][lines[i].find(' ') + 1:])
-                if in_shape:
-                    xout.end_elt('shape')
-                    in_shape = False
-                else:
-                    xout.start_elt('shape')
-                    xout.attr('type', shape)
-                    in_shape = True
+                    xout.start_elt(key)
+                    xout.attr('type', val)
             else:
                 xout.text(escape(line))
             cmd_type = None
