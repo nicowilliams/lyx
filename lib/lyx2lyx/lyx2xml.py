@@ -12,7 +12,7 @@ import sys
 
 debug = False
 
-mixed_tags = { 'emph':'bool', 'shape':'multivalue', 'series':'multivalue' }
+mixed_tags = { 'emph':'default', 'shape':'default', 'series':'default', 'color':'inherit', 'lang':'english'}
 
 def _fix_text_styling(lines, debugcb):
     stack = []
@@ -32,13 +32,29 @@ def _fix_text_styling(lines, debugcb):
             i += 1
             continue
         v = line[line.find(' ') + 1:]
-        if v != 'default':
+        if v != mixed_tags[a]:
+            # We're opening a new whatever it is.
+            # XXX But we need to handle the possibility that we're
+            # changing the whatever it is!  How to handle this?  We
+            # could convert
+            #  \lang french foo \lang spanish bar \lang english foobar
+            # to
+            #  <lang a="french">foo<lang a="spanish">bar</lang></lang>
+            # or to
+            #  <lang a="french">foo</lang><lang a="spanish">bar</lang>
+            # The latter would be easier: just close all tags up to the
+            # farthest one in the stack for the tag being closed, then
+            # re-open any others that were found along the way.  But the
+            # former is clearly more correct!  And that requires
+            # handling in this case right here, which means re-factoring
+            # some of the code from the elif: the code to close and
+            # re-open tags.
             #debugcb('seen \\%s at line %d' % (line, i))
             stack.append((a, v))
             #debugcb('3 i++ at %d' % (i,))
             i += 1
         elif stack[-1][0] != a:
-            # Out of order; re-order
+            # We're closing a whatever it is, but out of order.
             debugcb('fixing ordering for \\%s at line %d, stack = %s' % (a, i, repr(stack)))
             for k in range(len(stack) - 1, -1, -1):
                 if stack[k][0] == a:
@@ -46,7 +62,7 @@ def _fix_text_styling(lines, debugcb):
                     del(stack[k])
                     continue
                 debugcb('fixing ordering for \\%s by closing %s' % (a, stack[k][0]))
-                lines.insert(i, '\\' + stack[k][0] + ' default')
+                lines.insert(i, '\\' + stack[k][0] + ' ' + mixed_tags[a])
                 #debugcb('4 i++ at %d' % (i,))
                 i += 1
             #debugcb('5 i++ at %d' % (i,))
@@ -200,6 +216,8 @@ def _handle_interspersed_attrs(lines, xout, start, end, debugcb):
             if a and v:
                 debugcb('lines[%d] = %s' % (i, lines[i]))
                 xout.attr(a, v)
+                if a == 'language':
+                    mixed_tags['lang'] = v
         i += 1
 
 def _key(line):
