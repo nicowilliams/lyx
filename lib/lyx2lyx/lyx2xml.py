@@ -4,7 +4,7 @@
 This file has code for straightforward conversion of LyX format to XML.
 '''
 
-from parser_tools import find_end_of
+from parser_tools import find_end_of, find_tokens, check_token, get_containing_layout
 from xml.sax.saxutils import escape
 from xml_streamer import XmlStreamer
 import re
@@ -138,15 +138,15 @@ class LyX2XML(object):
         self.xout = XmlStreamer(outcb or LyX2XML._outcb, 'lyx') # No DTD...
         self.xout.start_elt('lyx')
         sys.stdout.write('\n\n')
-        lines = self._fix_text_styling()
+        self._fix_text_styling()
         if self.debug_level >= 3:
             self.dbg(3, 'Fixed lines:\n')
-            for i in range(len(lines)):
-                self.dbg(3, '%d %s' % (i + 1, lines[i]))
+            for i in range(len(self.lines)):
+                self.dbg(3, '%d %s' % (i + 1, self.lines[i]))
         self._lyx2xml()
         self.xout.end_elt('lyx')
         self.xout.finish()
-        return True
+        return None
 
     def _reopen_styling(self, tag, style, stack): pass
 
@@ -155,6 +155,13 @@ class LyX2XML(object):
         self.stack = []
         stack = self.stack
         fixes = []
+        # First we'll rename the \color in the header, if any.
+        i = find_tokens(lines, ('\\color', '\\end_header'), 0)
+        if i != -1 and \
+           check_token(lines[i], '\\color') and \
+           not get_containing_layout(lines, i):
+            lines[i] = '\\color_in_header ' + lines[i].split()[1]
+        # Now let's get on with the rest
         i = 0
         while i < len(lines):
             line = lines[i]
