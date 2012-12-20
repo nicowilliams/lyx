@@ -5,7 +5,7 @@
 import optparse
 import sys
 import LyX
-from lyx2xml import read_lyx, lyx2xml
+from lyx2xml import LyX2XML
 
 def outcb(text):
     if text:
@@ -25,12 +25,12 @@ def main():
     (options, args) = parser.parse_args()
 
     def _debugcb(s):
-        if options.debug != None:
+        if options.debug:
             sys.stderr.write('\n\n[debug] %s\n' % (s))
     if args:
-        lyx2xml(read_lyx(args[0]), outcb, _debugcb)
+        LyX2XML(args[0], outcb, _debugcb, options.debug or 0)
     else:
-        lyx2xml(read_lyx('/dev/fd/0'), outcb, _debugcb)
+        LyX2XML('/dev/fd/0', outcb, _debugcb, options.debug or 0)
 
     sys.exit(0)
 
