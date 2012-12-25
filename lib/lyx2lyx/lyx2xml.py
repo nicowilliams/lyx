@@ -10,7 +10,7 @@ from xml_streamer import XmlStreamer
 import re
 import sys
 
-mixed_tags = { 'emph':'default', 'shape':'default', 'series':'default', 'color':'inherit', 'lang':'english'}
+mixed_tags = { 'emph':'default', 'shape':'default', 'series':'default', 'color':'inherit', 'lang':'english', 'family':'default'}
 
 def _read_lyx(f):
     f = open(f, 'r')
@@ -138,7 +138,17 @@ class LyX2XML(object):
         self.xout = XmlStreamer(outcb or LyX2XML._outcb, 'lyx') # No DTD...
         self.xout.start_elt('lyx')
         sys.stdout.write('\n\n')
+        # Fix the lack of XML-ish nesting of things like \series, \emph,
+        # \family, \color, \shape, and \lang
         self._fix_text_styling()
+        # Uncomment to save a copy of the .lyx with fixed styling, for
+        # debugging purposes:
+        #f = open('/tmp/f', 'w+')
+        #for i in range(len(self.lines)):
+        #    f.write(self.lines[i])
+        #    if self.lines[i][-1] != '\n':
+        #        f.write('\n')
+        #f.close()
         if self.debug_level >= 3:
             self.dbg(3, 'Fixed lines:\n')
             for i in range(len(self.lines)):
@@ -148,7 +158,65 @@ class LyX2XML(object):
         self.xout.finish()
         return None
 
-    def _reopen_styling(self, tag, style, stack): pass
+    # Returns one past the new location of self.lines[i], after possibly
+    # inserting lines to close and re-open tags as implied by
+    # self.lines[i], to make it possible to emit proper XML.
+    def _close_and_reopen_styling(self, i, tag, new_style):
+        lines = self.lines
+        stack = self.stack
+        found = False
+        # XXX Could use an __in__ operator overloading for this code (or
+        # could use lists' in operator with a list comprehension to make
+        # a list with just the first element of each tuple in stack):
+        for k in range(len(stack) - 1, -1, -1):
+            if stack[k][0] == tag:
+                found = True
+                break
+        if not found:
+            # We're just opening a tag that's not already in the stack.
+            # Not much to do in this case.
+            assert new_style != mixed_tags[tag]
+            self.dbg(2, 'adding (\\%s, %s) to the stack (%s) at %d' % (tag, new_style, repr(stack), i))
+            stack.append((tag, new_style))
+            return i + 1
+        # OK, we have work to do: close all intervening tags, close this
+        # one, re-open all those tags and this one.
+        self.dbg(2, 'fixing ordering for \\%s at line %d, stack = %s' % (tag, i, repr(stack)))
+        m = -1
+        for k in range(len(stack) - 1, -1, -1):
+            # Close tags
+            m = k
+            # If this element in the stack is not the one we'll
+            # terminate at (tag) or if it is but we're opening a new
+            # style:
+            if stack[k][0] != tag or new_style != mixed_tags[tag]:
+                # Close the tag stack[k][0]
+                self.dbg(2, 'fixing ordering for \\%s by closing %s %s to re-open it' % (tag, stack[k][0], stack[k][1]))
+                lines.insert(i, '\\' + stack[k][0] + ' ' + mixed_tags[stack[k][0]])
+                i += 1 # keep i pointing at the line triggering all this
+                if stack[k][0] == tag:
+                    stack[k] = (tag, new_style)
+                    m += 1
+                    break
+            else:
+                assert stack[k][0] == tag and new_style == mixed_tags[tag]
+                # This line closes a tag, so just remove the
+                # corresponding entry in the stack (any others before
+                # this one will have been closed above).
+                del(stack[k])
+                break
+        # Now re-open those intervening tags that we closed; we do this
+        # *after* the line triggering all this, since that's the one
+        # opening a tag.
+        i += 1
+        k = m
+        while k > -1 and k < len(stack):
+            lines.insert(i, '\\' + stack[k][0] + ' ' + stack[k][1])
+            k += 1
+            i += 1
+        self.dbg(5, 'foo at %d: %s' % (i, lines[i]))
+        return i
+
 
     def _fix_text_styling(self):
         lines = self.lines
@@ -166,10 +234,13 @@ class LyX2XML(object):
         while i < len(lines):
             line = lines[i]
             self.dbg(4, 'looking at line %d: %s' % (i, line))
+            # XXX We really should simplify all this startswith()
+            # nonsense.
             if not line.startswith('\\') or line.find(' ') == -1:
                 self.dbg(5, '1 i++ at %d' % (i,))
                 i += 1
                 continue
+            # XXX And this parsing nonsense needs refactoring too
             line = _chomp(line[1:])
             a = line[0:line.find(' ')]
             if not a in mixed_tags:
@@ -177,55 +248,23 @@ class LyX2XML(object):
                 i += 1
                 continue
             v = line[line.find(' ') + 1:]
-            if v != mixed_tags[a]:
-                # We're opening a new whatever it is.
-                # XXX But we need to handle the possibility that we're
-                # changing the whatever it is!  How to handle this?  We
-                # could convert
-                #  \lang french foo \lang spanish bar \lang english foobar
-                # to
-                #  <lang a="french">foo<lang a="spanish">bar</lang></lang>
-                # or to
-                #  <lang a="french">foo</lang><lang a="spanish">bar</lang>
-                # The latter would be easier: just close all tags up to the
-                # farthest one in the stack for the tag being closed, then
-                # re-open any others that were found along the way.  But the
-                # former is clearly more correct!  And that requires
-                # handling in this case right here, which means re-factoring
-                # some of the code from the elif: the code to close and
-                # re-open tags.
-                self.dbg(4, 'seen \\%s at line %d' % (line, i))
-                stack.append((a, v))
-                self.dbg(5, '3 i++ at %d' % (i,))
-                i += 1
-            elif stack[-1][0] != a:
-                # We're closing a whatever it is, but out of order.
-                self.dbg(2, 'fixing ordering for \\%s at line %d, stack = %s' % (a, i, repr(stack)))
-                for k in range(len(stack) - 1, -1, -1):
-                    if stack[k][0] == a:
-                        self.dbg(2, 'fixed ordering for \\%s' % (a,))
-                        del(stack[k])
-                        continue
-                    self.dbg(2, 'fixing ordering for \\%s by closing %s' % (a, stack[k][0]))
-                    lines.insert(i, '\\' + stack[k][0] + ' ' + mixed_tags[a])
-                    self.dbg(5, '4 i++ at %d' % (i,))
-                    i += 1
-                self.dbg(5, '5 i++ at %d' % (i,))
-                i += 1
-                m = 0
-                for k in range(len(stack) - 1, -1, -1):
-                    if stack[k][0] == a:
-                        break
-                    lines.insert(i, '\\' + stack[k][0] + ' ' + stack[k][1])
-                    self.dbg(2, 'fixing ordering for \\%s by re-opening %s %s' % (a, stack[k][0], stack[k][1]))
-                    m += 1
-                self.dbg(5, '6 i += %d at %d' % (m, i))
-                i += m
-            else:
-                assert stack[-1][0] == a
-                stack.pop()
-                self.dbg(5, '7 i++ at %d' % (i,))
-                i += 1
+            # We're opening a new whatever it is.  But we need to handle
+            # the possibility that we're changing the whatever it is!
+            # How to handle this?  We could convert:
+            #  \lang french foo \lang spanish bar \lang english foobar
+            # to
+            #  <lang a="french">foo<lang a="spanish">bar</lang></lang>
+            # or to
+            #  <lang a="french">foo</lang><lang a="spanish">bar</lang>
+            # The former might be easier: just close all tags up to the
+            # farthest one in the stack for the tag being closed, then
+            # re-open any others that were found along the way.  But the
+            # latter is more sensible, so that's what we do.
+            # Invariant: we never have more than one style tag in the
+            # stack (XXX assert this in code).
+            self.dbg(4, 'seen \\%s at line %d' % (line, i))
+            i = self._close_and_reopen_styling(i, a, v)
+            self.dbg(5, '3 i++ at %d' % (i,))
 
     def _lyxml2xml(self, start, end):
         lines = self.lines
@@ -282,6 +321,8 @@ class LyX2XML(object):
                 if a and v:
                     xout.attr(a, v)
                     if a == 'language':
+                        # Set the default language; needed for the style
+                        # tag fix code.
                         mixed_tags['lang'] = v
                         self.dbg(2, 'Default language is %s' % (v,))
             i += 1
@@ -365,7 +406,7 @@ class LyX2XML(object):
                 key = _key(line)
                 if key in mixed_tags:
                     val = _chomp(lines[i][lines[i].find(' ') + 1:])
-                    if val == 'default':
+                    if val == mixed_tags[key]:
                         xout.end_elt(key)
                     else:
                         xout.start_elt(key)
