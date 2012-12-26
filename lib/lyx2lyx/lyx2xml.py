@@ -10,7 +10,13 @@ from xml_streamer import XmlStreamer
 import re
 import sys
 
-mixed_tags = { 'emph':'default', 'shape':'default', 'series':'default', 'color':'inherit', 'lang':'english', 'family':'default'}
+mixed_tags = { 'emph':'default', 'shape':'default',
+               'series':'default', 'color':'inherit',
+               'lang':'english', 'family':'default',
+               'size':'default', 'bar':'default',
+               'uwave':'default', 'uuline':'default',
+               'strikeout':'default', 'noun':'default'
+               }
 
 def _read_lyx(f):
     f = open(f, 'r')
