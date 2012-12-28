@@ -185,6 +185,11 @@ class LyX2XML(object):
         self.xout.attr('xmlns:layout', 'urn:cryptonector.com:lyx-layout')
         self.xout.attr('xmlns:inset', 'urn:cryptonector.com:lyx-inset')
         self.xout.attr('xmlns:flex', 'urn:cryptonector.com:lyx-flex')
+        # XXX MathML not yet implemented; we get to turn LyX formulas
+        # into MathML, joy!  But it looks like LaTeX math, and there's
+        # tools for converting that to MathML, so, hey, it might not be
+        # too much work.
+        self.xout.attr('xmlns:math', 'http://www.w3.org/1998/Math/MathML')
         sys.stdout.write('\n\n')
         # Fix the lack of XML-ish nesting of things like \series, \emph,
         # \family, \color, \shape, and \lang
