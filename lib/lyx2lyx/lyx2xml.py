@@ -10,13 +10,16 @@ from xml_streamer import XmlStreamer
 import re
 import sys
 
+brackets = { '\index':'\\end_index', '\\begin_':'\\end_' }
+
+namespaced = { 'layout':'layout', 'inset':'inset', 'inset Flex':'flex' }
+
 mixed_tags = { 'emph':'default', 'shape':'default',
                'series':'default', 'color':'inherit',
                'lang':'english', 'family':'default',
                'size':'default', 'bar':'default',
                'uwave':'default', 'uuline':'default',
-               'strikeout':'default', 'noun':'default'
-               }
+               'strikeout':'default', 'noun':'default' }
 
 def _read_lyx(f):
     f = open(f, 'r')
@@ -32,30 +35,66 @@ def _chomp(line):
         return line[:-2]
     return line[:-1]
 
-def _cmd_type(tag, rest):
+# Returns an indication of what kind of stuff follows a \\begin_XYZ.
+# For some insets (e.g., CommandInset, Tabular) there's commands that
+# follow and which must be handled as attributes even though they don't
+# start with a backslash.  For Tabular we must call _lyxml2xml().
+def _cmd_type(tag, thing):
     if tag != 'inset':
         return None
-    if rest.startswith('CommandInset') or rest.startswith('Float') or rest.startswith('listings'):
+    if thing.startswith('CommandInset') or \
+       thing.startswith('Float') or \
+       thing.startswith('listings'):
         return 'inset'
-    if rest == 'Tabular':
+    if thing == 'Tabular':
         return 'XML'
     return None
 
+# Given \begin_foo return ('foo', '\begin_foo', '\end_foo', []).
+# Given \index return ('index', '\index', '\end_index', []).
+# Given \begin_inset Formula stuff return ('index', '\index',
+# '\end_index', ['Formula', 'stuff']) (but don't further split stuff on
+# ' ').
+def _beginner(line):
+    if line[0] != '\\':
+        return None
+    # First handle things like '\index'
+    tok = _chomp(line)
+    toks1 = line.split(' ', 2)
+    tok = toks1[0]
+    if tok in brackets:
+        return (tok[1:], tok, brackets[tok], toks1[1:])
+    # Now handle more regular things (\begin_XYZ)
+    toks2 = tok.split('_', 1)
+    toks2[0] += '_'
+    if toks2[0] in brackets:
+        return (toks2[1], tok, brackets[toks2[0]] + toks2[1], toks1[1:])
+    return None
+
+# Given a thing begin returns (element_name, start_token, end_token,
+# command_type, rest).
+# 
+# XXX Make it return (namespaced_element_name, start_token, end_token,
+# command_type, rest), so
+#  '\begin_inset Flex foo' ->
+#    ('flex:foo', '\begin_inset', '\end_inset', None, None),
+# while
+#  '\begin_inset Formula stuff' ->
+#    ('inset:Formula', '\begin_inset', '\end_inset', None, 'stuff'),
+# and so on.
 def _parse_begin(line):
-    assert line.startswith('\\begin_') or line.startswith('\\index ')
-    line = _chomp(line)
-    if line.startswith('\\index '):
-        return ('index', '\\index', '\end_index', None, line[line.find(' ') + 1:])
-    sp = line.find(' ')
-    if sp >= 0:
-        tag = line[len('\\begin_'):sp]
-        start_tok = line[0:sp]
-        rest = line[sp + 1:]
+    (thing, start_tok, end_tok, rest) = _beginner(line)
+    if len(rest) > 0 and thing in namespaced:
+        key2 = thing + ' ' + rest[0]
+        if key2 in namespaced:
+            el = namespaced[key2] + ':' + rest[0]
+        else:
+            el = namespaced[thing] + ':' + rest[0]
     else:
-        tag = line[len('\\begin_'):]
-        start_tok = line
-        rest = None
-    return (tag, start_tok, '\end_' + tag, _cmd_type(tag, rest), rest)
+        el = thing
+    if len(rest) == 0:
+        return (el, start_tok, end_tok, None)
+    return (el, start_tok, end_tok, _cmd_type(thing, rest[0]))
 
 def _parse_attr(line):
     line = _chomp(line)
@@ -143,6 +182,9 @@ class LyX2XML(object):
             self.lines = lyx.readlines()
         self.xout = XmlStreamer(outcb or LyX2XML._outcb, 'lyx') # No DTD...
         self.xout.start_elt('lyx')
+        self.xout.attr('xmlns:layout', 'urn:cryptonector.com:lyx-layout')
+        self.xout.attr('xmlns:inset', 'urn:cryptonector.com:lyx-inset')
+        self.xout.attr('xmlns:flex', 'urn:cryptonector.com:lyx-flex')
         sys.stdout.write('\n\n')
         # Fix the lack of XML-ish nesting of things like \series, \emph,
         # \family, \color, \shape, and \lang
@@ -353,8 +395,8 @@ class LyX2XML(object):
                 #xout.comment(lines[i][1:])
                 i += 1
                 cmd_type = None
-            elif lines[i].startswith('\\begin_') or lines[i].startswith('\\index '):
-                (el, start_tok, end_tok, cmd_type, rest) = _parse_begin(lines[i])
+            elif _beginner(lines[i]):
+                (el, start_tok, end_tok, cmd_type) = _parse_begin(lines[i])
                 xout.start_elt(el)
                 if el == 'inset' and not cmd_type and (i + 1) < end and lines[i + 1].startswith('status '):
                     i += 1 # skip status open|collapsed line
@@ -362,8 +404,6 @@ class LyX2XML(object):
                 else:
                     status = None
                 self.dbg(4, 'lines[%d] = %s' % (i, lines[i]))
-                if rest:
-                    xout.attr('thing_name', rest)
                 e = find_end_of(lines, i, start_tok, end_tok)
                 assert e != -1
                 self.dbg(4, 'find_end_of(%d, %s, %s) = %d' % (i, start_tok, end_tok, e))
