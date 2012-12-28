@@ -60,7 +60,7 @@ def _beginner(line):
         return None
     # First handle things like '\index'
     tok = _chomp(line)
-    toks1 = line.split(' ', 2)
+    toks1 = tok.split(' ', 2)
     tok = toks1[0]
     if tok in brackets:
         return (tok[1:], tok, brackets[tok], toks1[1:])
@@ -93,8 +93,8 @@ def _parse_begin(line):
     else:
         el = thing
     if len(rest) == 0:
-        return (el, start_tok, end_tok, None)
-    return (el, start_tok, end_tok, _cmd_type(thing, rest[0]))
+        return (el, start_tok, end_tok, None, rest)
+    return (el, start_tok, end_tok, _cmd_type(thing, rest[0]), rest)
 
 def _parse_attr(line):
     line = _chomp(line)
@@ -396,7 +396,7 @@ class LyX2XML(object):
                 i += 1
                 cmd_type = None
             elif _beginner(lines[i]):
-                (el, start_tok, end_tok, cmd_type) = _parse_begin(lines[i])
+                (el, start_tok, end_tok, cmd_type, rest) = _parse_begin(lines[i])
                 xout.start_elt(el)
                 if el == 'inset' and not cmd_type and (i + 1) < end and lines[i + 1].startswith('status '):
                     i += 1 # skip status open|collapsed line
@@ -413,6 +413,8 @@ class LyX2XML(object):
                 self._handle_interspersed_attrs(i + 1, e - 1)
                 if status:
                     xout.attr('status', status)
+                if len(rest) == 2 and el != 'inset:Formula':
+                    xout.attr(rest[0], escape(rest[1]))
                 i = self._lyx2xml(i + 1, e, cmd_type)
                 self.dbg(4, '_lyx2xml(...) = %d, looking for %s at %d; end = %d' % (i, end_tok, e, end))
                 if i + 1 == e:
@@ -420,6 +422,9 @@ class LyX2XML(object):
                 else:
                     self.dbg(4, '_lyx2xml() returned %d, e = %d; end = %d' % (i, e, end))
                 assert lines[i].startswith('\\end_')
+                if len(rest) == 2 and el == 'inset:Formula':
+                    xout.text(' ')
+                    xout.text(escape(rest[1]))
                 xout.end_elt(el)
                 cmd_type = None
                 i += 1
