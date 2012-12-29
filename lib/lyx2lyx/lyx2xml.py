@@ -182,16 +182,8 @@ class LyX2XML(object):
             assert lyx.readlines
             self.lines = lyx.readlines()
         self.xout = XmlStreamer(outcb or LyX2XML._outcb, 'lyx') # No DTD...
-        self.xout.start_elt('lyx')
-        self.xout.attr('xmlns:layout', 'urn:cryptonector.com:lyx-layout')
-        self.xout.attr('xmlns:inset', 'urn:cryptonector.com:lyx-inset')
-        self.xout.attr('xmlns:flex', 'urn:cryptonector.com:lyx-flex')
-        # XXX MathML not yet implemented; we get to turn LyX formulas
-        # into MathML, joy!  But it looks like LaTeX math, and there's
-        # tools for converting that to MathML, so, hey, it might not be
-        # too much work.
-        self.xout.attr('xmlns:math', 'http://www.w3.org/1998/Math/MathML')
-        sys.stdout.write('\n\n')
+        # XXX Should move the rest of this to a 'convert' method.
+        #
         # Fix the lack of XML-ish nesting of things like \series, \emph,
         # \family, \color, \shape, and \lang
         self._fix_text_styling()
@@ -208,7 +200,6 @@ class LyX2XML(object):
             for i in range(len(self.lines)):
                 self.dbg(3, '%d %s' % (i + 1, self.lines[i]))
         self._lyx2xml()
-        self.xout.end_elt('lyx')
         self.xout.finish()
         return None
 
@@ -404,6 +395,15 @@ class LyX2XML(object):
             elif _beginner(lines[i]):
                 (el, start_tok, end_tok, cmd_type, rest) = _parse_begin(lines[i])
                 xout.start_elt(el)
+                if el == 'document':
+                    xout.attr('xmlns:layout', 'urn:cryptonector.com:lyx-layout')
+                    xout.attr('xmlns:inset', 'urn:cryptonector.com:lyx-inset')
+                    xout.attr('xmlns:flex', 'urn:cryptonector.com:lyx-flex')
+                    # XXX MathML not yet implemented; we get to turn LyX
+                    # formulas into MathML, joy!  But it looks like
+                    # LaTeX math, and there's tools for converting that
+                    # to MathML, so, hey, it might not be too much work.
+                    xout.attr('xmlns:math', 'http://www.w3.org/1998/Math/MathML')
                 if (el.startswith('inset:') or el.startswith('flex:')) and \
                    not cmd_type and (i + 1) < end and \
                    lines[i + 1].startswith('status '):
