@@ -404,9 +404,11 @@ class LyX2XML(object):
             elif _beginner(lines[i]):
                 (el, start_tok, end_tok, cmd_type, rest) = _parse_begin(lines[i])
                 xout.start_elt(el)
-                if el == 'inset' and not cmd_type and (i + 1) < end and lines[i + 1].startswith('status '):
+                if (el.startswith('inset:') or el.startswith('flex:')) and \
+                   not cmd_type and (i + 1) < end and \
+                   lines[i + 1].startswith('status '):
                     i += 1 # skip status open|collapsed line
-                    status = lines[i][lines[i].find(' ') + 1:]
+                    status = _chomp(lines[i][lines[i].find(' ') + 1:])
                 else:
                     status = None
                 self.dbg(4, 'lines[%d] = %s' % (i, lines[i]))
