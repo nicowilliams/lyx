@@ -283,6 +283,14 @@ class LyX2XML(object):
             self.dbg(4, 'looking at line %d: %s' % (i, line))
             # XXX We really should simplify all this startswith()
             # nonsense.
+            if line.startswith('\\end_'):
+                self.dbg(2, 'fixing unended style tags %s' % (repr(stack)))
+                for k in range(len(stack) - 1, -1, -1):
+                    lines.insert(i, '\\' + stack[k][0] + ' ' + mixed_tags[stack[k][0]])
+                    i += 1
+                del(stack[0:])
+                i += 1
+                continue
             if not line.startswith('\\') or line.find(' ') == -1:
                 self.dbg(5, '1 i++ at %d' % (i,))
                 i += 1
