@@ -71,6 +71,11 @@ def _beginner(line):
         return (toks2[1], tok, brackets[toks2[0]] + toks2[1], toks1[1:])
     return None
 
+def _fix_tag(tag):
+    if tag[0] == '-':
+        return 'x' + tag
+    return tag
+
 # Given a thing begin returns (element_name, start_token, end_token,
 # command_type, rest).
 # 
@@ -89,10 +94,10 @@ def _parse_begin(line):
         thing2 = rest[0]
         key2 = thing + ' ' + thing2
         if key2 in namespaced:
-            el = namespaced[key2] + ':' + rest[1].split()[0]
+            el = namespaced[key2] + ':' + _fix_tag(rest[1].split()[0])
             rest = rest[1].split(' ', 1)
         else:
-            el = namespaced[thing] + ':' + rest[0]
+            el = namespaced[thing] + ':' + _fix_tag(rest[0])
     else:
         el = thing
     if len(rest) == 0:
