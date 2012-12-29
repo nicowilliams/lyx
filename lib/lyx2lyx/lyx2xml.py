@@ -84,8 +84,10 @@ def _beginner(line):
 # and so on.
 def _parse_begin(line):
     (thing, start_tok, end_tok, rest) = _beginner(line)
+    thing2 = None
     if len(rest) > 0 and thing in namespaced:
-        key2 = thing + ' ' + rest[0]
+        thing2 = rest[0]
+        key2 = thing + ' ' + thing2
         if key2 in namespaced:
             el = namespaced[key2] + ':' + rest[1].split()[0]
             rest = rest[1].split(' ', 1)
@@ -94,8 +96,8 @@ def _parse_begin(line):
     else:
         el = thing
     if len(rest) == 0:
-        return (el, start_tok, end_tok, None, rest)
-    return (el, start_tok, end_tok, _cmd_type(thing, rest[0]), rest)
+        return (el, start_tok, end_tok, _cmd_type(thing, thing2), rest)
+    return (el, start_tok, end_tok, _cmd_type(thing, thing2), rest)
 
 def _parse_attr(line):
     line = _chomp(line)
@@ -379,7 +381,6 @@ class LyX2XML(object):
         if end < 0:
             end = len(lines)
         prev_i = -1
-        cmd_type = None
         while i < end:
             self.dbg(3, 'Parsing line %d: %s' % (i, lines[i]))
             assert i > prev_i
