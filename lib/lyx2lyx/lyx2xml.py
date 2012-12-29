@@ -87,7 +87,8 @@ def _parse_begin(line):
     if len(rest) > 0 and thing in namespaced:
         key2 = thing + ' ' + rest[0]
         if key2 in namespaced:
-            el = namespaced[key2] + ':' + rest[0]
+            el = namespaced[key2] + ':' + rest[1].split()[0]
+            rest = rest[1].split(' ', 1)
         else:
             el = namespaced[thing] + ':' + rest[0]
     else:
