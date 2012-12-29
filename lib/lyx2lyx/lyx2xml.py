@@ -379,6 +379,7 @@ class LyX2XML(object):
         if end < 0:
             end = len(lines)
         prev_i = -1
+        cmd_type = None
         while i < end:
             self.dbg(3, 'Parsing line %d: %s' % (i, lines[i]))
             assert i > prev_i
@@ -404,6 +405,8 @@ class LyX2XML(object):
                     # LaTeX math, and there's tools for converting that
                     # to MathML, so, hey, it might not be too much work.
                     xout.attr('xmlns:math', 'http://www.w3.org/1998/Math/MathML')
+                    # Suck in \lyxformat
+                    self._handle_interspersed_attrs(0, i)
                 if (el.startswith('inset:') or el.startswith('flex:')) and \
                    not cmd_type and (i + 1) < end and \
                    lines[i + 1].startswith('status '):
